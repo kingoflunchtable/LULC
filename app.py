@@ -7,6 +7,7 @@ import plotly.express as px
 import plotly.figure_factory as ff
 import cv2
 import random
+import os
 
 # --- UI Configuration ---
 st.set_page_config(page_title="GeoVision Pro | LULC Analyzer", layout="wide")
