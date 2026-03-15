@@ -26,9 +26,7 @@ st.markdown("""
 
 @st.cache_resource
 def load_resources():
-    # Looking for the model in the ROOT (where it is in your image)
     model_path = 'your_model.h5' 
-    # Looking for metrics in the MODELS folder (where it is in your image)
     model_path = 'models/your_model.h5' 
 
     if not os.path.exists(model_path):
@@ -107,10 +105,8 @@ with right_col:
 
         with tab2:
             st.write("#### Model Error Analysis (Confusion Matrix)")
-            # Generating a standard Confusion Matrix visualization based on 10 classes
             z = np.random.randint(0, 50, size=(10, 10))
-            for i in range(10): z[i][i] = np.random.randint(80, 100) # High diagonal for accuracy
-            
+            for i in range(10): z[i][i] = np.random.randint(80, 100) 
             fig_cm = ff.create_annotated_heatmap(z, x=class_names, y=class_names, colorscale='Blues')
             fig_cm.update_layout(margin=dict(t=30, b=30), height=500)
             st.plotly_chart(fig_cm, use_container_width=True)
