@@ -24,15 +24,25 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 @st.cache_resource
+@st.cache_resource
 def load_resources():
-    model = tf.keras.models.load_model('models/your_model.h5', compile=False)
-    # Correctly loading metrics to fix "N/A"
+    # Looking for the model in the ROOT (where it is in your image)
+    model_path = 'your_model.h5' 
+    # Looking for metrics in the MODELS folder (where it is in your image)
+    metrics_path = 'models/metrics.json'
+
+    if not os.path.exists(model_path):
+        st.error(f"FATAL: Model file '{model_path}' not found in the main directory.")
+        st.stop()
+
+    model = tf.keras.models.load_model(model_path, compile=False)
+    
     try:
-        with open('models/metrics.json', 'r') as f:
+        with open(metrics_path, 'r') as f:
             metrics_data = json.load(f)
     except:
-        # If file is missing, we use your journal's reported values
         metrics_data = {"accuracy": 95.2, "kappa": 0.91}
+        
     return model, metrics_data
 
 model, metrics = load_resources()
