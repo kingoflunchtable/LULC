@@ -29,7 +29,7 @@ def load_resources():
     # Looking for the model in the ROOT (where it is in your image)
     model_path = 'your_model.h5' 
     # Looking for metrics in the MODELS folder (where it is in your image)
-    metrics_path = 'models/metrics.json'
+    model_path = 'models/your_model.h5' 
 
     if not os.path.exists(model_path):
         st.error(f"FATAL: Model file '{model_path}' not found in the main directory.")
