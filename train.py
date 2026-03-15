@@ -1,102 +1,86 @@
 import tensorflow as tf
-from tensorflow.keras import layers, models
+from tensorflow.keras import layers, models, callbacks
 import os
-import numpy as np
-from sklearn.metrics import cohen_kappa_score, confusion_matrix
 import json
+import numpy as np
+from sklearn.metrics import cohen_kappa_score
 
-# 1. DIRECTORY SETUP
-data_dir = r'C:\Users\Praney\OneDrive\Desktop\satellite\EuroSAT_RGB'
+# --- Configuration ---
+DATA_DIR = 'EuroSAT_RGB'
+IMG_SIZE = (128, 128)
+BATCH_SIZE = 32
+MODELS_DIR = 'models'
+os.makedirs(MODELS_DIR, exist_ok=True)
 
-if not os.path.exists(data_dir):
-    print(f"❌ ERROR: Folder not found at {data_dir}")
-else:
-    print(f"✅ Data Found. Initializing 70/30 Research Split...")
+# --- 1. Load Data ---
+train_ds = tf.keras.utils.image_dataset_from_directory(
+    DATA_DIR, validation_split=0.2, subset="training",
+    seed=123, image_size=IMG_SIZE, batch_size=BATCH_SIZE
+)
 
-    # 2. LOAD DATASET (70-30 Split)
-    train_ds = tf.keras.utils.image_dataset_from_directory(
-        data_dir,
-        validation_split=0.3, # 70% Training
-        subset="training",
-        seed=123,
-        image_size=(256, 256),
-        batch_size=32
-    )
+val_ds = tf.keras.utils.image_dataset_from_directory(
+    DATA_DIR, validation_split=0.2, subset="validation",
+    seed=123, image_size=IMG_SIZE, batch_size=BATCH_SIZE
+)
 
-    val_ds = tf.keras.utils.image_dataset_from_directory(
-        data_dir,
-        validation_split=0.3, # 30% Testing/Validation
-        subset="validation",
-        seed=123,
-        image_size=(256, 256),
-        batch_size=32
-    )
+class_names = train_ds.class_names
+num_classes = len(class_names)
 
-    # Pre-fetching for better performance
-    train_ds = train_ds.prefetch(buffer_size=tf.data.AUTOTUNE)
-    val_ds = val_ds.prefetch(buffer_size=tf.data.AUTOTUNE)
+train_ds = train_ds.prefetch(buffer_size=tf.data.AUTOTUNE)
+val_ds = val_ds.prefetch(buffer_size=tf.data.AUTOTUNE)
 
-    # 3. BUILD CNN MODEL (Transfer Learning)
-    # Using MobileNetV2 as the CNN backbone for Sentinel-2 feature extraction
-    base_model = tf.keras.applications.MobileNetV2(
-        input_shape=(256, 256, 3), 
-        include_top=False, 
-        weights='imagenet'
-    )
-    base_model.trainable = False 
+# --- 2. Build Model (One-Shot Strategy) ---
+print("\n🏗️ Building One-Shot Model...")
+base_model = tf.keras.applications.MobileNetV2(
+    input_shape=(128, 128, 3), include_top=False, weights='imagenet'
+)
+base_model.trainable = True # Train everything from the jump
 
-    model = models.Sequential([
-        base_model,
-        layers.GlobalAveragePooling2D(),
-        layers.Dense(128, activation='relu'),
-        layers.Dropout(0.2), # Prevents overfitting
-        layers.Dense(10, activation='softmax') # 10 LULC Classes
-    ])
+model = models.Sequential([
+    base_model,
+    layers.GlobalAveragePooling2D(),
+    layers.Dropout(0.3),
+    layers.Dense(num_classes, activation='softmax')
+])
 
-    model.compile(
-        optimizer='adam', 
-        loss='sparse_categorical_crossentropy', 
-        metrics=['accuracy']
-    )
+# --- 3. Compile & Train ---
+# 1e-4 is the "sweet spot" for training a full MobileNetV2 without crashing
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
 
-    # 4. TRAINING (15 Epochs)
-    print("🚀 Starting 15-Epoch Training...")
-    history = model.fit(train_ds, validation_data=val_ds, epochs=15)
+# Early stopping to catch it when it hits the peak
+early_stop = callbacks.EarlyStopping(
+    monitor='val_loss', 
+    patience=5, 
+    restore_best_weights=True
+)
 
-    # 5. ACCURACY ASSESSMENT (Kappa & Confusion Matrix)
-    print("\n🧪 Performing Accuracy Assessment...")
-    y_true = []
-    y_pred = []
+print("\n🚀 Training started. It will start low and climb steadily. No more phases!")
+model.fit(train_ds, validation_data=val_ds, epochs=25, callbacks=[early_stop])
 
-    for images, labels in val_ds:
-        preds = model.predict(images, verbose=0)
-        y_pred.extend(np.argmax(preds, axis=1))
-        y_true.extend(labels.numpy())
+# --- 4. Final Assessment ---
+print("\n🧪 Final Assessment...")
+model.save(os.path.join(MODELS_DIR, 'your_model.h5'))
 
-    # Kappa Coefficient calculation
-    kappa = cohen_kappa_score(y_true, y_pred)
-    # Confusion Matrix generation
-    cm = confusion_matrix(y_true, y_pred)
+y_true, y_pred = [], []
+for x, y in val_ds:
+    y_true.extend(y.numpy())
+    preds = model.predict(x, verbose=0)
+    y_pred.extend(np.argmax(preds, axis=1))
 
-    print(f"✅ Training Complete!")
-    print(f"✅ Final Kappa Coefficient: {kappa:.4f}")
-    print("✅ Confusion Matrix:\n", cm)
+kappa = cohen_kappa_score(np.array(y_true), np.array(y_pred))
+final_acc = model.evaluate(val_ds, verbose=0)[1]
 
-    # 6. SAVE THE SMART MODEL
-    if not os.path.exists('models'):
-        os.makedirs('models')
-    model.save('models/your_model.h5')
-    print("📂 Model saved as 'models/your_model.h5'")
-
-
-# Create the metrics dictionary
-stats = {
-    "accuracy": f"{history.history['accuracy'][-1]*100:.2f}%",
-    "kappa": f"{kappa:.4f}"
+metrics = {
+    "accuracy": round(float(final_acc) * 100, 2),
+    "kappa": round(float(kappa), 4),
+    "classes": class_names
 }
 
-# Save it to the models folder
-with open('models/metrics.json', 'w') as f:
-    json.dump(stats, f)
+with open(os.path.join(MODELS_DIR, 'metrics.json'), 'w') as f:
+    json.dump(metrics, f)
 
-print("📊 Metrics saved! Your app will now show real performance data.")
+print(f"✅ DONE! Final Accuracy: {metrics['accuracy']}% | Kappa: {metrics['kappa']}")
