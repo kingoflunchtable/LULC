@@ -25,7 +25,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 @st.cache_resource
-@st.cache_resource
 def load_resources():
     # Looking for the model in the ROOT (where it is in your image)
     model_path = 'your_model.h5' 
