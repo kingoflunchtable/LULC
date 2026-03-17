@@ -61,26 +61,3 @@ early_stop = callbacks.EarlyStopping(
 print("\n🚀 Training started. It will start low and climb steadily. No more phases!")
 model.fit(train_ds, validation_data=val_ds, epochs=25, callbacks=[early_stop])
 
-# --- 4. Final Assessment ---
-print("\n🧪 Final Assessment...")
-model.save(os.path.join(MODELS_DIR, 'your_model.h5'))
-
-y_true, y_pred = [], []
-for x, y in val_ds:
-    y_true.extend(y.numpy())
-    preds = model.predict(x, verbose=0)
-    y_pred.extend(np.argmax(preds, axis=1))
-
-kappa = cohen_kappa_score(np.array(y_true), np.array(y_pred))
-final_acc = model.evaluate(val_ds, verbose=0)[1]
-
-metrics = {
-    "accuracy": round(float(final_acc) * 100, 2),
-    "kappa": round(float(kappa), 4),
-    "classes": class_names
-}
-
-with open(os.path.join(MODELS_DIR, 'metrics.json'), 'w') as f:
-    json.dump(metrics, f)
-
-print(f"✅ DONE! Final Accuracy: {metrics['accuracy']}% | Kappa: {metrics['kappa']}")
