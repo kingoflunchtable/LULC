@@ -18,4 +18,4 @@ print("Extraction complete!")
 
 # 3. Clean up
 os.remove(zip_path)
-print("Done! You should now see the '27500' folder in your sidebar.")   
+print("Done!")   
